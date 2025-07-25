@@ -42,15 +42,21 @@ mlflow.start_run(run_name=CONFIG["experiment_name"])
 mlflow.log_params(CONFIG)
 
 def load_data():
-    """Load and preprocess training data"""
+    """Load and preprocess training data in JSONL format"""
     try:
+        data = []
         with open(CONFIG["data_path"], 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            for line in f:
+                if line.strip():  # Skip empty lines
+                    try:
+                        data.append(json.loads(line.strip()))
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Error parsing line: {line.strip()}\n{e}")
+                        continue
         if not data:
             logger.error("No data found in ev_training_alpaca.json")
             raise ValueError("No data found in ev_training_alpaca.json")
         dataset = Dataset.from_list(data)
-        # Use fixed split ratios since config.Training.TRAIN_SPLIT doesn't exist
         train_size = int(len(dataset) * 0.8)  # 80% for training
         val_size = int(len(dataset) * 0.2)    # 20% for validation
         train_data = dataset.select(range(train_size))
