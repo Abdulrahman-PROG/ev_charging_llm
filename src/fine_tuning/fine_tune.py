@@ -5,11 +5,10 @@ from datetime import datetime
 from datasets import Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer
 from peft import LoraConfig, get_peft_model
-from transformers import BitsAndBytesConfig
 import mlflow
 from common.logging import setup_logging
 from common.utils import format_prompt
-from config import config
+from common.config import config
 import numpy as np
 from rouge_score import rouge_scorer
 
@@ -45,6 +44,9 @@ def load_data():
     try:
         with open(CONFIG["data_path"], 'r', encoding='utf-8') as f:
             data = json.load(f)
+        if not data:
+            logger.error("No data found in ev_training_alpaca.json")
+            raise ValueError("No data found in ev_training_alpaca.json")
         dataset = Dataset.from_list(data)
         train_size = int(len(dataset) * config.Training.TRAIN_SPLIT)
         val_size = int(len(dataset) * config.Training.VAL_SPLIT)
@@ -83,20 +85,22 @@ def main():
     """Main fine-tuning function"""
     logger.info("Starting fine-tuning process...")
 
-    # Load data
-    train_data, val_data = load_data()
+    # Check if quantization is enabled
+    quantization_config = None
+    if config.Model.QUANTIZATION_ENABLED:
+        from transformers import BitsAndBytesConfig
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type=config.Model.QUANTIZATION_TYPE,
+            bnb_4bit_compute_dtype=torch.float32  # Use float32 for CPU compatibility
+        )
 
     # Load tokenizer and model
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type=config.Model.QUANTIZATION_TYPE,
-        bnb_4bit_compute_dtype=torch.float16
-    )
     tokenizer = AutoTokenizer.from_pretrained(CONFIG["model_name"], token=config.Model.HF_TOKEN)
     model = AutoModelForCausalLM.from_pretrained(
         CONFIG["model_name"],
-        quantization_config=bnb_config,
-        device_map="auto",
+        quantization_config=quantization_config,
+        device_map="cpu" if not torch.cuda.is_available() else "auto",
         token=config.Model.HF_TOKEN
     )
     if tokenizer.pad_token is None:
@@ -113,9 +117,12 @@ def main():
     model = get_peft_model(model, lora_config)
     logger.info(f"Model loaded with {model.num_parameters():,} parameters")
 
+    # Load data
+    train_data, val_data = load_data()
+
     # Tokenize datasets
-    train_dataset = train_data.map(lambda x: tokenize_function(x, tokenizer), batched=True)
-    val_dataset = val_data.map(lambda x: tokenize_function(x, tokenizer), batched=True)
+    train_dataset = train_data.map(lambda x: tokenize_function([x], tokenizer), batched=False)
+    val_dataset = val_data.map(lambda x: tokenize_function([x], tokenizer), batched=False)
 
     # Setup training arguments
     training_args = TrainingArguments(
@@ -132,7 +139,7 @@ def main():
         save_total_limit=config.Training.SAVE_TOTAL_LIMIT,
         weight_decay=config.Training.WEIGHT_DECAY,
         max_grad_norm=config.Training.MAX_GRAD_NORM,
-        fp16=config.Training.FP16,
+        fp16=config.Training.FP16 and torch.cuda.is_available(),
         report_to="mlflow"
     )
 
