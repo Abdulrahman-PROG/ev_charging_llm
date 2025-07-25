@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+*.egg-info/
+.pipenv
+Pipfile.lock
+
+# Environment variables
+.env
+*.env
+
+# Data and models
+data/*
+!data/pdfs/.gitkeep
+output_data/*
+!output_data/.gitkeep
+models/*
+!models/.gitkeep
+evaluation_results/*
+!evaluation_results/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# MLflow
+mlruns/
+mlflow.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Docker
+docker-compose.yml
+*.dockerignore
+
+# Misc
+.DS_Store
+*.log
+*.tmp
+*.bak
+*.swp
