@@ -18,6 +18,7 @@ from common.utils import format_prompt
 
 # Download NLTK data
 nltk.download('punkt')
+nltk.download('punkt_tab')  # Add this line to download punkt_tab
 
 # Setup logging
 logger = setup_logging(__name__)
@@ -82,6 +83,7 @@ def collect_data():
         # Save raw data
         df = pd.DataFrame(data)
         output_csv = os.path.join(config.DataCollection.OUTPUT_DIR, "ev_data.csv")
+        os.makedirs(config.DataCollection.OUTPUT_DIR, exist_ok=True)  # Ensure output directory exists
         df.to_csv(output_csv, index=False)
         mlflow.log_artifact(output_csv)
 
