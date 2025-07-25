@@ -1,22 +1,21 @@
 import logging
 import os
+from datetime import datetime
 from common.config import config
-def setup_logging(module_name: str) -> logging.Logger:
-    """Setup logging configuration for a module"""
-    logger = logging.getLogger(module_name)
-    logger.setLevel(getattr(logging, config.Monitoring.LOG_LEVEL))
+
+def setup_logging(name):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)  # Use INFO as default log level
     
-    # Create handlers
-    file_handler = logging.FileHandler(config.Monitoring.LOG_FILE)
-    stream_handler = logging.StreamHandler()
+    log_dir = config.Logging.LOG_DIR
+    os.makedirs(log_dir, exist_ok=True)
     
-    # Create formatters
-    formatter = logging.Formatter(config.Monitoring.LOG_FORMAT)
+    log_file = os.path.join(log_dir, f"pipeline_{datetime.now().strftime('%Y%m%d')}.log")
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
-    stream_handler.setFormatter(formatter)
     
-    # Add handlers to logger
     logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
-    
     return logger
