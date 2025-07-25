@@ -1,3 +1,5 @@
+import sys
+sys.path.append('/app')
 import os
 import json
 import torch

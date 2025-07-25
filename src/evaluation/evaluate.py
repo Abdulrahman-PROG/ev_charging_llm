@@ -1,3 +1,5 @@
+import sys
+sys.path.append('/app')
 import json
 import pandas as pd
 import torch
