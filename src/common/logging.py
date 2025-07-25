@@ -1,7 +1,6 @@
 import logging
 import os
-from config import config
-
+from common.config import config
 def setup_logging(module_name: str) -> logging.Logger:
     """Setup logging configuration for a module"""
     logger = logging.getLogger(module_name)
