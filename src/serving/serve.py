@@ -8,10 +8,16 @@ from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from prometheus_client import Counter, Histogram, start_http_server
 import psutil
+from datetime import datetime
+import sys
+import os
+
+# Adjust sys.path to include /app for imports
+sys.path.append('/app')
+
 from common.logging import setup_logging
 from common.utils import format_prompt, generate_response
 from common.config import config
-from datetime import datetime
 
 # Setup logging
 logger = setup_logging(__name__)
@@ -50,7 +56,7 @@ class ModelServer:
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True,
                     bnb_4bit_quant_type=config.Model.QUANTIZATION_TYPE,
-                    bnb_4bit_compute_dtype=torch.float32  # Use float32 for CPU compatibility
+                    bnb_4bit_compute_dtype=torch.float32
                 )
             if os.path.exists(model_path):
                 logger.info(f"Loading fine-tuned model from: {model_path}")
