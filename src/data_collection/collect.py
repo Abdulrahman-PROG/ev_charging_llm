@@ -47,6 +47,7 @@ class DataCollector:
                             'length': len(combined_text),
                             'timestamp': datetime.now().isoformat()
                         })
+                logger.info(f"Extracted {len(data)} pages from {pdf_path}")
                 return data
         except Exception as e:
             logger.error(f"Error reading {pdf_path}: {e}")
@@ -62,8 +63,8 @@ class DataCollector:
             title = soup.find('title').get_text() if soup.find('title') else url
             main_content = soup.find('article') or soup.find('div', class_=['content', 'main'])
             text = main_content.get_text(separator=' ', strip=True) if main_content else soup.get_text(separator=' ', strip=True)
-            if text:
-                return {
+            if text and len(text.strip()) > 0:
+                data = {
                     'source': 'web',
                     'url': url,
                     'title': title,
@@ -71,6 +72,9 @@ class DataCollector:
                     'length': len(text),
                     'timestamp': datetime.now().isoformat()
                 }
+                logger.info(f"Scraped {len(text)} characters from {url}")
+                return data
+            logger.warning(f"No content extracted from {url}")
             return None
         except Exception as e:
             logger.error(f"Error scraping {url}: {e}")
@@ -78,12 +82,18 @@ class DataCollector:
     
     def is_relevant_content(self, text: str) -> bool:
         """Check if content is relevant to EV charging"""
+        if not text or not isinstance(text, str):
+            return False
         text_lower = text.lower()
         keyword_count = sum(1 for keyword in config.DataCollection.EV_KEYWORDS if keyword.lower() in text_lower)
         relevance_score = keyword_count / len(config.DataCollection.EV_KEYWORDS) if config.DataCollection.EV_KEYWORDS else 0
-        return (len(text) >= config.DataCollection.MIN_TEXT_LENGTH and 
-                len(text) <= config.DataCollection.MAX_TEXT_LENGTH and 
-                relevance_score >= config.DataCollection.QUALITY_THRESHOLD)
+        is_valid = (
+            len(text) >= config.DataCollection.MIN_TEXT_LENGTH and 
+            len(text) <= config.DataCollection.MAX_TEXT_LENGTH and 
+            relevance_score >= config.DataCollection.QUALITY_THRESHOLD
+        )
+        logger.debug(f"Relevance check: length={len(text)}, score={relevance_score}, valid={is_valid}")
+        return is_valid
     
     def collect_from_pdfs(self):
         """Collect data from PDF files in the specified folder"""
@@ -92,27 +102,37 @@ class DataCollector:
             logger.warning(f"PDF folder {pdf_folder} does not exist")
             return
         
+        pdf_count = 0
         for filename in os.listdir(pdf_folder):
-            if filename.endswith('.pdf'):
+            if filename.lower().endswith('.pdf'):
                 pdf_path = os.path.join(pdf_folder, filename)
                 logger.info(f"Processing PDF: {pdf_path}")
                 pdf_data = self.extract_pdf_text(pdf_path)
                 for item in pdf_data:
                     if self.is_relevant_content(item['text']):
                         self.data.append(item)
+                pdf_count += 1
+        logger.info(f"Processed {pdf_count} PDFs")
     
     def collect_from_web(self):
         """Collect data from specified web URLs"""
+        url_count = 0
         for url in config.DataCollection.WEB_SCRAPING_URLS:
             if url.strip():
                 logger.info(f"Scraping URL: {url}")
                 web_data = self.scrape_webpage(url)
                 if web_data and self.is_relevant_content(web_data['text']):
                     self.data.append(web_data)
+                url_count += 1
                 time.sleep(config.DataCollection.DELAY_BETWEEN_REQUESTS)
+        logger.info(f"Processed {url_count} URLs")
     
     def generate_qa_pairs(self):
         """Generate Q&A pairs from collected data"""
+        if not self.data:
+            logger.warning("No data available to generate Q&A pairs")
+            return
+        
         for item in self.data:
             text = item['text']
             sentences = sent_tokenize(text)
@@ -121,29 +141,36 @@ class DataCollector:
                 if question.endswith('.'):
                     question = question[:-1] + '?'
                 answer = sentences[i + 1].strip()
-                if len(question) > 10 and len(answer) > 20:
+                if len(question) > 10 and len(answer) > 20 and self.is_relevant_content(question + answer):
                     qa_pair = {
                         'instruction': question,
                         'output': answer,
                         'input': f"Source: {item['source']}, {item.get('filename', item.get('url', ''))}"
                     }
                     self.qa_pairs.append(qa_pair)
+        logger.info(f"Generated {len(self.qa_pairs)} Q&A pairs")
     
     def save_data(self):
         """Save collected data and Q&A pairs"""
         try:
+            os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+            
             # Save raw data
             if self.data:
                 output_csv = os.path.join(config.OUTPUT_DIR, 'ev_data.csv')
-                pd.DataFrame(self.data).to_csv(output_csv, index=False)
-                logger.info(f"Saved raw data to {output_csv}")
+                pd.DataFrame(self.data).to_csv(output_csv, index=False, encoding='utf-8')
+                logger.info(f"Saved {len(self.data)} data items to {output_csv}")
+            else:
+                logger.warning("No data to save to ev_data.csv")
             
             # Save Q&A pairs
             if self.qa_pairs:
                 output_json = os.path.join(config.OUTPUT_DIR, 'ev_training_alpaca.json')
                 with open(output_json, 'w', encoding='utf-8') as f:
                     json.dump(self.qa_pairs, f, indent=2, ensure_ascii=False)
-                logger.info(f"Saved Q&A pairs to {output_json}")
+                logger.info(f"Saved {len(self.qa_pairs)} Q&A pairs to {output_json}")
+            else:
+                logger.warning("No Q&A pairs to save to ev_training_alpaca.json")
         except Exception as e:
             logger.error(f"Error saving data: {e}")
 
