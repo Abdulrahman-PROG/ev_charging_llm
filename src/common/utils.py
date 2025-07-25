@@ -1,6 +1,7 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from config import config
+from common.config import config
+
 
 def format_prompt(instruction: str, input_text: str = "") -> str:
     """Format the prompt for the model"""
