@@ -1,6 +1,7 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dotenv import load_dotenv
+from typing import List
 
 load_dotenv()
 
@@ -13,11 +14,11 @@ MODEL_DIR = os.path.join(BASE_DIR, 'models')
 
 @dataclass
 class DataCollection:
-    WEB_SCRAPING_URLS: list = [url.strip() for url in os.getenv('WEB_SCRAPING_URLS', '').split(',') if url.strip()]
+    WEB_SCRAPING_URLS: List[str] = field(default_factory=lambda: [url.strip() for url in os.getenv('WEB_SCRAPING_URLS', '').split(',') if url.strip()])
     PDF_DIR: str = os.path.join(DATA_DIR, 'pdfs')
     OUTPUT_DIR: str = OUTPUT_DIR
     MIN_TEXT_LENGTH: int = 50
-    EV_KEYWORDS: list = ['electric vehicle', 'EV', 'charging', 'charger', 'battery', 'station']
+    EV_KEYWORDS: List[str] = field(default_factory=lambda: ['electric vehicle', 'EV', 'charging', 'charger', 'battery', 'station'])
 
 @dataclass
 class Model:
@@ -59,9 +60,9 @@ class Deployment:
     API_HOST: str = os.getenv('API_HOST', '0.0.0.0')
     API_PORT: int = int(os.getenv('API_PORT', 8000))
     API_WORKERS: int = int(os.getenv('API_WORKERS', 4))
-    CORS_ORIGINS: list = ['*']
-    CORS_METHODS: list = ['*']
-    CORS_HEADERS: list = ['*']
+    CORS_ORIGINS: List[str] = field(default_factory=lambda: ['*'])
+    CORS_METHODS: List[str] = field(default_factory=lambda: ['*'])
+    CORS_HEADERS: List[str] = field(default_factory=lambda: ['*'])
 
 @dataclass
 class Config:
