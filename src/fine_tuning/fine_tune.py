@@ -19,25 +19,25 @@ logger = setup_logging(__name__)
 
 # Configuration
 CONFIG = {
-    "data_path": os.path.join(config.OUTPUT_DIR, "ev_training_alpaca.json"),
-    "output_dir": config.Model.FINE_TUNED_MODEL_PATH,
+    "data_path": os.path.join(config.DataCollection.OUTPUT_DIR, "ev_training_alpaca.json"),  # Fixed
+    "output_dir": config.Model.FINAL_MODEL_PATH,  # Use FINAL_MODEL_PATH directly
     "final_model_path": config.Model.FINAL_MODEL_PATH,
     "model_name": config.Model.BASE_MODEL_NAME,
-    "max_length": config.Model.MAX_LENGTH,
+    "max_length": config.Model.GENERATION_MAX_LENGTH,  # Use GENERATION_MAX_LENGTH
     "train_batch_size": config.Model.TRAIN_BATCH_SIZE,
     "eval_batch_size": config.Model.EVAL_BATCH_SIZE,
     "learning_rate": config.Model.LEARNING_RATE,
     "num_epochs": config.Model.NUM_EPOCHS,
     "warmup_steps": config.Model.WARMUP_STEPS,
-    "lora_r": config.Model.LORA_R,
+    "lora_r": config.Model.LORA_RANK,  # Use LORA_RANK
     "lora_alpha": config.Model.LORA_ALPHA,
     "lora_dropout": config.Model.LORA_DROPOUT,
-    "experiment_name": config.Training.EXPERIMENT_NAME
+    "experiment_name": config.MLFLOW_EXPERIMENT_NAME  # Fixed: Use MLFLOW_EXPERIMENT_NAME directly
 }
 
 # Setup MLflow
-mlflow.set_tracking_uri(config.Training.MLFLOW_TRACKING_URI)
-mlflow.set_experiment(config.Training.MLFLOW_EXPERIMENT_NAME)
+mlflow.set_tracking_uri(config.MLFLOW_TRACKING_URI)
+mlflow.set_experiment(config.MLFLOW_EXPERIMENT_NAME)
 mlflow.start_run(run_name=CONFIG["experiment_name"])
 mlflow.log_params(CONFIG)
 
@@ -50,8 +50,9 @@ def load_data():
             logger.error("No data found in ev_training_alpaca.json")
             raise ValueError("No data found in ev_training_alpaca.json")
         dataset = Dataset.from_list(data)
-        train_size = int(len(dataset) * config.Training.TRAIN_SPLIT)
-        val_size = int(len(dataset) * config.Training.VAL_SPLIT)
+        # Use fixed split ratios since config.Training.TRAIN_SPLIT doesn't exist
+        train_size = int(len(dataset) * 0.8)  # 80% for training
+        val_size = int(len(dataset) * 0.2)    # 20% for validation
         train_data = dataset.select(range(train_size))
         val_data = dataset.select(range(train_size, train_size + val_size))
         logger.info(f"Loaded {len(train_data)} training and {len(val_data)} validation examples")
@@ -114,7 +115,7 @@ def main():
         r=CONFIG["lora_r"],
         lora_alpha=CONFIG["lora_alpha"],
         lora_dropout=CONFIG["lora_dropout"],
-        target_modules=config.Model.LORA_TARGET_MODULES
+        target_modules=["q_proj", "v_proj"]  # Fixed: Define target modules explicitly
     )
     model = get_peft_model(model, lora_config)
     logger.info(f"Model loaded with {model.num_parameters():,} parameters")
@@ -134,14 +135,14 @@ def main():
         per_device_eval_batch_size=CONFIG["eval_batch_size"],
         learning_rate=CONFIG["learning_rate"],
         warmup_steps=CONFIG["warmup_steps"],
-        logging_steps=config.Training.LOGGING_STEPS,
+        logging_steps=100,  # Fixed: Use default value
         evaluation_strategy="steps",
-        eval_steps=config.Training.EVAL_STEPS,
-        save_steps=config.Training.SAVE_STEPS,
-        save_total_limit=config.Training.SAVE_TOTAL_LIMIT,
-        weight_decay=config.Training.WEIGHT_DECAY,
-        max_grad_norm=config.Training.MAX_GRAD_NORM,
-        fp16=config.Training.FP16 and torch.cuda.is_available(),
+        eval_steps=500,     # Fixed: Use default value
+        save_steps=500,     # Fixed: Use default value
+        save_total_limit=2, # Fixed: Use default value
+        weight_decay=0.01,  # Fixed: Use default value
+        max_grad_norm=1.0,  # Fixed: Use default value
+        fp16=False,         # Disable fp16 for CPU compatibility
         report_to="mlflow"
     )
 
