@@ -5,12 +5,13 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORS
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from prometheus_client import Counter, Histogram, start_http_server
 import psutil
 from common.logging import setup_logging
 from common.utils import format_prompt, generate_response
-from config import config
+from common.config import config
+from datetime import datetime
 
 # Setup logging
 logger = setup_logging(__name__)
@@ -43,22 +44,29 @@ class ModelServer:
         start_time = time.time()
         try:
             model_path = config.Model.FINAL_MODEL_PATH
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type=config.Model.QUANTIZATION_TYPE,
-                bnb_4bit_compute_dtype=torch.float16
-            )
+            quantization_config = None
+            if config.Model.QUANTIZATION_ENABLED:
+                from transformers import BitsAndBytesConfig
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type=config.Model.QUANTIZATION_TYPE,
+                    bnb_4bit_compute_dtype=torch.float32  # Use float32 for CPU compatibility
+                )
             if os.path.exists(model_path):
                 logger.info(f"Loading fine-tuned model from: {model_path}")
                 self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-                self.model = AutoModelForCausalLM.from_pretrained(model_path, quantization_config=bnb_config, device_map="auto")
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    quantization_config=quantization_config,
+                    device_map="cpu" if not torch.cuda.is_available() else "auto"
+                )
             else:
-                logger.warning(f"Fine-tuned model not found, using base model")
+                logger.warning(f"Fine-tuned model not found at {model_path}, using base model")
                 self.tokenizer = AutoTokenizer.from_pretrained(config.Model.BASE_MODEL_NAME, token=config.Model.HF_TOKEN)
                 self.model = AutoModelForCausalLM.from_pretrained(
                     config.Model.BASE_MODEL_NAME,
-                    quantization_config=bnb_config,
-                    device_map="auto",
+                    quantization_config=quantization_config,
+                    device_map="cpu" if not torch.cuda.is_available() else "auto",
                     token=config.Model.HF_TOKEN
                 )
             if self.tokenizer.pad_token is None:
@@ -114,8 +122,16 @@ async def generate(request: GenerateRequest, api_key: str = Depends(verify_api_k
                 raise HTTPException(status_code=400, detail="Temperature must be between 0.1 and 1.0")
             if not 50 <= request.max_length <= 500:
                 raise HTTPException(status_code=400, detail="Max length must be between 50 and 500")
+            if not model_server.model_loaded:
+                raise HTTPException(status_code=503, detail="Model not loaded")
             prompt = format_prompt(request.instruction, request.input)
-            response = generate_response(model_server.model, model_server.tokenizer, prompt, request.max_length, request.temperature)
+            response = generate_response(
+                model_server.model,
+                model_server.tokenizer,
+                prompt,
+                max_length=request.max_length,
+                temperature=request.temperature
+            )
             return {"response": response, "instruction": request.instruction, "input": request.input}
         except Exception as e:
             logger.error(f"Generation failed: {e}")
