@@ -6,7 +6,7 @@ from typing import List
 load_dotenv()
 
 # Define base directories
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+BASE_DIR = '/app'  # Explicitly set to /app for Docker container
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output_data')
 LOG_DIR = os.path.join(BASE_DIR, 'logs')
